@@ -1,0 +1,53 @@
+//@version=5
+indicator("Market Trend Analyzer", overlay=true)
+
+// === USER INPUTS ===
+lookbackPeriod = input.int(20, "Trend Lookback Period", minval=5, maxval=200)
+maType = input.string("EMA", "Moving Average Type", options=["SMA", "EMA", "WMA"])
+slowMAPeriod = input.int(50, "Slow MA Period", minval=10, maxval=200)
+fastMAPeriod = input.int(20, "Fast MA Period", minval=5, maxval=100)
+adxPeriod = input.int(14, "ADX Period", minval=5, maxval=50)
+adxThreshold = input.int(25, "ADX Threshold", minval=15, maxval=40)
+consolidationThreshold = input.float(0.5, "Consolidation Threshold (%)", minval=0.1, maxval=5, step=0.1)
+
+// === CALCULATE MOVING AVERAGES ===
+fastMA = maType == "SMA" ? ta.sma(close, fastMAPeriod) : maType == "EMA" ? ta.ema(close, fastMAPeriod) : ta.wma(close, fastMAPeriod)
+slowMA = maType == "SMA" ? ta.sma(close, slowMAPeriod) : maType == "EMA" ? ta.ema(close, slowMAPeriod) : ta.wma(close, slowMAPeriod)
+
+// === CALCULATE ADX FOR TREND STRENGTH ===
+[diplus, diminus, adxValue] = ta.dmi(14, adxPeriod)
+
+// === CALCULATE PRICE RANGE FOR CONSOLIDATION DETECTION ===
+highestHigh = ta.highest(high, lookbackPeriod)
+lowestLow = ta.lowest(low, lookbackPeriod)
+priceRange = 100 * (highestHigh - lowestLow) / lowestLow // Range as percentage
+
+// === DETERMINE MARKET CONDITION ===
+isConsolidation = priceRange < consolidationThreshold or adxValue < adxThreshold
+isUptrend = not isConsolidation and fastMA > slowMA and close > fastMA
+isDowntrend = not isConsolidation and fastMA < slowMA and close < fastMA
+
+// === SET MARKET CONDITION TEXT AND COLOR ===
+marketCondition = isConsolidation ? "Consolidation" : isUptrend ? "Uptrend" : isDowntrend ? "Downtrend" : "Undefined"
+conditionColor = isConsolidation ? color.new(color.yellow, 0) : isUptrend ? color.new(color.green, 0) : isDowntrend ? color.new(color.red, 0) : color.new(color.gray, 0)
+
+// === PLOT MOVING AVERAGES ===
+plot(fastMA, "Fast MA", color=color.new(color.blue, 0), linewidth=2)
+plot(slowMA, "Slow MA", color=color.new(color.purple, 0), linewidth=2)
+
+// === DISPLAY MARKET CONDITION LABEL ===
+if barstate.islast
+    label.new(bar_index, high + (high * 0.02), marketCondition, color=conditionColor, textcolor=color.white, size=size.large)
+
+// === BACKGROUND COLORING FOR VISUAL CLARITY ===
+bgcolor(isUptrend ? color.new(color.green, 90) : isDowntrend ? color.new(color.red, 90) : color.new(color.yellow, 90), title="Trend Background")
+
+// === ADDITIONAL INFORMATION DISPLAY ===
+var table infoTable = table.new(position.bottom_right, 2, 3, border_width=1)
+if barstate.islast
+    table.cell(infoTable, 0, 0, "ADX Value:", bgcolor=color.new(color.gray, 90), text_color=color.white)
+    table.cell(infoTable, 1, 0, str.tostring(adxValue, "#.##"), bgcolor=color.new(color.gray, 90), text_color=adxValue > adxThreshold ? color.green : color.red)
+    table.cell(infoTable, 0, 1, "Price Range %:", bgcolor=color.new(color.gray, 90), text_color=color.white)
+    table.cell(infoTable, 1, 1, str.tostring(priceRange, "#.##") + "%", bgcolor=color.new(color.gray, 90), text_color=priceRange > consolidationThreshold ? color.green : color.yellow)
+    table.cell(infoTable, 0, 2, "Market Trend:", bgcolor=color.new(color.gray, 90), text_color=color.white)
+    table.cell(infoTable, 1, 2, marketCondition, bgcolor=color.new(color.gray, 90), text_color=conditionColor)
